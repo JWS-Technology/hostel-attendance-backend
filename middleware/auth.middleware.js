@@ -14,22 +14,18 @@ const isUserLoggedIn = async (req, res, next) => {
   }
 };
 
-const verifyToken = (req, res, next) => {
+exports.verifyAccessToken = (req, res, next) => {
+  const header = req.headers.authorization;
+  if (!header) return res.status(401).json({ error: "Unauthorized" });
+
+  const token = header.split(" ")[1];
+
   try {
-    const token = req.cookies.token;
-    if (!token) {
-      return res
-        .status(401)
-        .json({ error: "Access denied. No token provided." });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.token = decoded;
-
+    req.user = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
     next();
-  } catch (err) {
-    res.status(401).json({ error: "Invalid token." });
+  } catch {
+    return res.status(401).json({ error: "Token expired" });
   }
 };
 
-module.exports = { verifyToken, isUserLoggedIn };
+module.exports = { verifyAccessToken, isUserLoggedIn };

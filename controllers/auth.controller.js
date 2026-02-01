@@ -1,63 +1,72 @@
-const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
+const crypto = require("crypto");
+
 const User = require("../models/user.model");
 const Student = require("../models/student.model");
+const RefreshToken = require("../models/refreshToken.model");
 
-const userLogin = async (req, res) => {
+const generateAccessToken = (payload) => {
+  return jwt.sign(
+    payload,
+    process.env.ACCESS_TOKEN_SECRET,
+    { expiresIn: "15m" }
+  );
+};
+
+exports.login = async (req, res) => {
   try {
-    const { username, password } = req.body;
-    let account = null;
-    let roleType = "";
+    const { username, password, device } = req.body;
 
-    // 1. Check in User collection (admins)
-    account = await User.findOne({ username });
+    if (!username || !password || !device) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    let account = await User.findOne({ username });
+    let role = null;
+    let userType = "User";
+
     if (account) {
-      roleType = account.role;
-      const isMatch = await bcrypt.compare(password, account.password);
-      if (!isMatch) {
-        return res.status(400).json({ message: "Invalid credentials" });
-      }
-    }
-
-    // 2. If not found in User, check Student collection
-    if (!account) {
+      const ok = await bcrypt.compare(password, account.password);
+      if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+      role = account.role;
+    } else {
       account = await Student.findOne({ dNo: username });
-      if (account) {
-        roleType = "student";
-        if (account.password !== password) {
-          return res.status(400).json({ message: "Invalid credentials" });
-        }
+      if (!account || account.password !== password) {
+        return res.status(401).json({ error: "Invalid credentials" });
       }
+      role = "student";
+      userType = "Student";
     }
 
-    // 3. If still not found
-    if (!account) {
-      return res.status(400).json({ message: "User not found" });
-    }
+    const accessToken = generateAccessToken({
+      id: account._id,
+      role
+    });
 
-    // 4. Generate JWT and set token
-    const JWT_SECRET = process.env.JWT_SECRET;
-    const token = jwt.sign({ id: account._id, role: roleType }, JWT_SECRET);
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "None",
-      path: "/",
-      maxAge: 60 * 60 * 1000,   // 1 hour
+    const refreshToken = crypto.randomBytes(40).toString("hex");
+
+    await RefreshToken.create({
+      user: account._id,
+      userType,
+      token: refreshToken,
+      device,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
     });
 
     res.status(200).json({
-      message: "Login successful",
+      accessToken,
+      refreshToken,
       user: {
         id: account._id,
-        username: account.username || account.name,
-        role: roleType,
-      },
+        name: account.username || account.name,
+        role
+      }
     });
 
   } catch (err) {
-    console.error("Error in userLogin controller \n", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 };
 

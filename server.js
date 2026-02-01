@@ -47,7 +47,7 @@ app.use("/api/leave", leaveRoutes);
 //   .catch((err) => console.error(err));
 
 module.exports = app;
-// const PORT = 5000;
-// app.listen(PORT, () => {
-//   console.log("Listening on PORT : " + PORT);
-// });
+const PORT = 5000;
+app.listen(PORT, () => {
+  console.log("Listening on PORT : " + PORT);
+});
