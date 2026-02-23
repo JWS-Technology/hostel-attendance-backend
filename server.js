@@ -17,7 +17,7 @@ connectDB();
 
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://sh.devnoel.org",
+  "https://sh.jwstechnologies.com",
   "https://sh-frontend-dev.jwstechnologies.com",
 ];
 
