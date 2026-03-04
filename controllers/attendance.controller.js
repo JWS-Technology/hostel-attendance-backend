@@ -78,9 +78,26 @@ const getChristianStudentsAccordingToAd = async (req, res) => {
     const matchConditions = [];
 
     user.roomsIncharge.forEach((range) => {
+      const halls = range.hall || [];
       const from = parseInt(range.from);
       const to = parseInt(range.to);
 
+      // ✅ Hall rooms (same as normal fetch)
+      if (Array.isArray(halls) && halls.length > 0) {
+        matchConditions.push({
+          $and: [
+            { roomNo: { $in: halls } },
+            { roomNo: { $not: { $regex: /\d/ } } },
+            {
+              religion: {
+                $in: [/^christ/i, /^rc$/i]
+              }
+            }
+          ],
+        });
+      }
+
+      // ✅ Numeric room ranges
       if (!isNaN(from) && !isNaN(to)) {
         matchConditions.push({
           $and: [
@@ -128,7 +145,7 @@ const getChristianStudentsAccordingToAd = async (req, res) => {
     res.json({ students: groupedUsers });
 
   } catch (error) {
-    console.error(error);
+    console.error("Error in getChristianStudentsAccordingToAd:\n", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
