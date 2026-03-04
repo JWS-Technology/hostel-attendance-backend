@@ -6,6 +6,7 @@ const Student = require("../models/student.model");
 const userLogin = async (req, res) => {
   try {
     const { username, password } = req.body;
+    console.log(username, password)
     let account = null;
     let roleType = "";
 
