@@ -24,11 +24,15 @@ const Leave = require("../models/leave.model");
 
 const markAttendance = async (req, res) => {
   const ad = req.token.id;
-  const type = "general";
-  const { records } = req.body;
+  const { records, type } = req.body;
 
   if (!ad || !records || !type)
     return res.status(400).json({ error: "Missing fields" });
+
+
+  if (!["general", "special"].includes(type)) {
+    return res.status(400).json({ error: "Invalid attendance type" });
+  }
 
   try {
     // ✅ Define start and end of today
@@ -40,14 +44,14 @@ const markAttendance = async (req, res) => {
 
     // ✅ Check if attendance already exists for today
     const existingAttendance = await Attendance.findOne({
-      ad,
-      type,
+      ad: ad,
+      type: type,
       date: { $gte: todayStart, $lte: todayEnd },
     });
 
     if (existingAttendance) {
       return res.status(400).json({
-        error: "Attendance for today has already been submitted",
+        error: "${type} Attendance for today has already been submitted",
       });
     }
 
@@ -62,6 +66,72 @@ const markAttendance = async (req, res) => {
   }
 };
 
+const getChristianStudentsAccordingToAd = async (req, res) => {
+  try {
+    const adId = req.token.id;
+    const user = await User.findById(adId);
+
+    if (!user || !user.roomsIncharge || user.roomsIncharge.length === 0) {
+      return res.status(404).json({ error: "No rooms assigned to this AD" });
+    }
+
+    const matchConditions = [];
+
+    user.roomsIncharge.forEach((range) => {
+      const from = parseInt(range.from);
+      const to = parseInt(range.to);
+
+      if (!isNaN(from) && !isNaN(to)) {
+        matchConditions.push({
+          $and: [
+            { block: range.block },
+            { numericRoom: { $gte: from, $lte: to } },
+            {
+              religion: {
+                $in: [/^christ/i, /^rc$/i]
+              }
+            }
+          ],
+        });
+      }
+    });
+
+    const students = await Students.aggregate([
+      {
+        $addFields: {
+          numericRoom: {
+            $cond: {
+              if: { $regexMatch: { input: "$roomNo", regex: /^[0-9]+$/ } },
+              then: { $toInt: "$roomNo" },
+              else: null,
+            },
+          },
+        },
+      },
+      {
+        $match: { $or: matchConditions },
+      },
+    ]);
+
+    const groupedUsers = {};
+
+    students.forEach((student) => {
+      const roomKey = `${student.block}-${student.roomNo}`;
+      if (!groupedUsers[roomKey]) groupedUsers[roomKey] = [];
+
+      groupedUsers[roomKey].push({
+        ...student,
+        status: "present",
+      });
+    });
+
+    res.json({ students: groupedUsers });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
 
 const getStudentsAccordingToAd = async (req, res) => {
   try {
@@ -259,5 +329,6 @@ module.exports = {
   markAttendance,
   getStudentsAccordingToAd,
   getAttendanceRecords,
-  updateStudentRoom
+  updateStudentRoom,
+  getChristianStudentsAccordingToAd
 };
