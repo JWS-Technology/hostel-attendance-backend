@@ -22,10 +22,7 @@ const allowedOrigins = [
 ];
 
 app.use(
-  cors({
-    origin: allowedOrigins,
-    credentials: true,
-  })
+  cors()
 );
 
 app.use(express.urlencoded({ extended: true }));
@@ -47,7 +44,7 @@ app.use("/api/leave", leaveRoutes);
 //   .catch((err) => console.error(err));
 
 module.exports = app;
-// const PORT = 5000;
-// app.listen(PORT, () => {
-//   console.log("Listening on PORT : " + PORT);
-// });
+const PORT = 5000;
+app.listen(PORT, () => {
+  console.log("Listening on PORT : " + PORT);
+});
