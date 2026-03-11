@@ -128,6 +128,15 @@ const getChristianStudentsAccordingToAd = async (req, res) => {
       {
         $match: { $or: matchConditions },
       },
+      // --- OPTIMIZATION: Only return necessary fields ---
+      {
+        $project: {
+          name: 1,
+          accNo: 1,
+          block: 1,
+          roomNo: 1
+        }
+      }
     ]);
 
     const groupedUsers = {};
@@ -146,6 +155,63 @@ const getChristianStudentsAccordingToAd = async (req, res) => {
 
   } catch (error) {
     console.error("Error in getChristianStudentsAccordingToAd:\n", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+const getChristianStudentsByYear = async (req, res) => {
+  try {
+    const { yearPrefix } = req.query; // e.g., "25", "24", "23"
+
+    if (!yearPrefix) {
+      return res.status(400).json({ error: "Year prefix is required" });
+    }
+
+    // Fetch all Christian/RC students whose dNo starts with the yearPrefix
+    const students = await Students.aggregate([
+      {
+        $match: {
+          religion: { $in: [/^christ/i, /^rc$/i] },
+          dNo: { $regex: new RegExp(`^${yearPrefix}`) } // Matches dNo starting with "25", etc.
+        }
+      },
+      {
+        $addFields: {
+          numericRoom: {
+            $cond: {
+              if: { $regexMatch: { input: "$roomNo", regex: /^[0-9]+$/ } },
+              then: { $toInt: "$roomNo" },
+              else: null,
+            },
+          },
+        }
+      },
+      // --- OPTIMIZATION: Only return necessary fields ---
+      {
+        $project: {
+          name: 1,
+          accNo: 1,
+          block: 1,
+          roomNo: 1
+        }
+      }
+    ]);
+
+    // Group them by Block and RoomNo exactly like the other endpoints
+    const groupedUsers = {};
+    students.forEach((student) => {
+      const roomKey = `${student.block}-${student.roomNo}`;
+      if (!groupedUsers[roomKey]) groupedUsers[roomKey] = [];
+
+      groupedUsers[roomKey].push({
+        ...student,
+        status: "present",
+      });
+    });
+    res.json({ students: groupedUsers });
+
+  } catch (error) {
+    console.error("Error in getChristianStudentsByYear:\n", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -243,16 +309,23 @@ const getStudentsAccordingToAd = async (req, res) => {
 const getAttendanceRecords = async (req, res) => {
   try {
     const adId = req.token.id;
+    const { from, to } = req.query; // Catch the query params
 
-    // Calculate last 5 days range (inclusive of today)
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
+    let start, end;
 
-    const start = new Date();
-    start.setDate(start.getDate() - 4); // 4 days back + today = 5 days
-    start.setHours(0, 0, 0, 0);
+    if (from && to) {
+      // Use the requested date range (Weekly / Monthly)
+      start = new Date(from);
+      end = new Date(to);
+    } else {
+      // Fallback to default 8-day range
+      end = new Date();
+      end.setHours(23, 59, 59, 999);
+      start = new Date();
+      start.setDate(start.getDate() - 8);
+      start.setHours(0, 0, 0, 0);
+    }
 
-    // Build match for this AD and the 5-day window
     const match = {
       ad: adId,
       date: { $gte: start, $lte: end },
@@ -347,5 +420,6 @@ module.exports = {
   getStudentsAccordingToAd,
   getAttendanceRecords,
   updateStudentRoom,
-  getChristianStudentsAccordingToAd
+  getChristianStudentsAccordingToAd,
+  getChristianStudentsByYear
 };
