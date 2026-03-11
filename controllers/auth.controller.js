@@ -102,4 +102,52 @@ const getMe = async (req, res) => {
   }
 };
 
-module.exports = { userLogin, logout, getMe };
+const getProfile = async (req, res) => {
+  try {
+    const userId = req.token.id;
+
+    const user = await User.findById(userId).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({ user });
+
+  } catch (error) {
+    console.error("Profile fetch error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+const changePassword = async (req, res) => {
+  try {
+    const userId = req.token.id;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    const user = await User.findById(userId);
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({ error: "Current password incorrect" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    user.password = hashedPassword;
+    await user.save();
+
+    res.json({ message: "Password updated successfully" });
+
+  } catch (error) {
+    console.error("Password update error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+module.exports = { userLogin, logout, getMe, getProfile, changePassword };
