@@ -12,7 +12,7 @@ const studentRoutes = require("./routes/students");
 const attendanceRoutes = require("./routes/attendance.route");
 const leaveRoutes = require("./routes/leave.route");
 const announcementRoutes = require("./routes/announcement.routes");
-
+const restrictedRoutes = require("./routes/restricted.routes");
 const app = express();
 connectDB();
 
@@ -39,13 +39,7 @@ app.use("/api/students", studentRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/leave", leaveRoutes);
 app.use("/api/announcements", announcementRoutes);
-// mongoose
-//   .connect(process.env.MONGO_URI, {
-//     useNewUrlParser: true,
-//     useUnifiedTopology: true,
-//   })
-//   .then(() => console.log("MongoDB connected"))
-//   .catch((err) => console.error(err));
+app.use("/api/restricted", restrictedRoutes);
 
 module.exports = app;
 // const PORT = 5000;
