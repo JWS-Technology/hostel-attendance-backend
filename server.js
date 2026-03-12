@@ -11,6 +11,7 @@ const authRoutes = require("./routes/auth.route");
 const studentRoutes = require("./routes/students");
 const attendanceRoutes = require("./routes/attendance.route");
 const leaveRoutes = require("./routes/leave.route");
+const announcementRoutes = require("./routes/announcement.routes");
 
 const app = express();
 connectDB();
@@ -37,7 +38,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/leave", leaveRoutes);
-
+app.use("/api/announcements", announcementRoutes);
 // mongoose
 //   .connect(process.env.MONGO_URI, {
 //     useNewUrlParser: true,
@@ -47,7 +48,7 @@ app.use("/api/leave", leaveRoutes);
 //   .catch((err) => console.error(err));
 
 module.exports = app;
-const PORT = 5000;
-app.listen(PORT, () => {
-  console.log("Listening on PORT : " + PORT);
-});
+// const PORT = 5000;
+// app.listen(PORT, () => {
+//   console.log("Listening on PORT : " + PORT);
+// });
