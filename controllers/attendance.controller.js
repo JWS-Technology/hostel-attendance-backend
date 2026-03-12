@@ -133,12 +133,13 @@ const getChristianStudentsAccordingToAd = async (req, res) => {
         $project: {
           name: 1,
           accNo: 1,
+          dNo: 1,
           block: 1,
           roomNo: 1
         }
       }
     ]);
-
+    // console.log(students);
     const groupedUsers = {};
 
     students.forEach((student) => {
@@ -191,6 +192,7 @@ const getChristianStudentsByYear = async (req, res) => {
         $project: {
           name: 1,
           accNo: 1,
+          dNo: 1,
           block: 1,
           roomNo: 1
         }
