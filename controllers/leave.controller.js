@@ -64,9 +64,14 @@ exports.applyLeave = async (req, res) => {
             routeTo = "ad";
         }
 
-        // Check for Restricted Dates (Overrides AD weekend logic)
+        // --- THE TIMEZONE FIX ---
+        // A restricted date represents midnight of that day. 
+        // We expand the search window by exactly 24 hours before the student's departure time 
+        // to catch the midnight timestamp of the day they are leaving!
+        const startWindow = new Date(start.getTime() - (24 * 60 * 60 * 1000));
+
         const restrictedDates = await RestrictedDate.find({
-            date: { $gte: start, $lte: end }
+            date: { $gt: startWindow, $lte: end }
         });
 
         if (restrictedDates.length > 0) {
@@ -76,6 +81,7 @@ exports.applyLeave = async (req, res) => {
                     restrictedReason: restrictedDates[0].reason
                 });
             }
+            // If they checked emergency, force it to the Director
             routeTo = "director";
         }
 
