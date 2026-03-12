@@ -1,78 +1,33 @@
-// routes/leave.routes.js
 const express = require("express");
 const router = express.Router();
 const { verifyToken } = require("../middleware/auth.middleware");
-const Leave = require("../models/leave.model");
-const User = require("../models/user.model");
+const Leave = require("../models/leave.model"); // Keeping this only for the inline GET routes
 
+// IMPORT YOUR SMART CONTROLLER
+const leaveController = require("../controllers/leave.controller");
 
-// 📌 Create leave request
-router.post("/", verifyToken, async (req, res) => {
-    try {
-        const { fromDate, toDate, reason } = req.body;
+// 📌 1. Student applies for leave (Uses the smart weekday/restricted logic)
+router.post("/apply", verifyToken, leaveController.applyLeave);
 
-        const leave = new Leave({
-            student: req.token.id, // userId from token
-            fromDate,
-            toDate,
-            reason,
-        });
+// 📌 2. Director Action (Approve/Reject)
+router.post("/:leaveId/director-action", verifyToken, leaveController.directorAction);
 
-        await leave.save();
-        res.status(201).json({ success: true, leave });
-    } catch (err) {
-        console.error("Error creating leave request:", err);
-        res.status(500).json({ error: "Internal Server Error" });
-    }
-});
+// 📌 3. AD Action (Approve weekend leave / Check director leave)
+router.post("/:leaveId/ad-action", verifyToken, leaveController.adAction);
 
-// 📌 Get my leave requests
-// router.get("/my-requests", verifyToken, async (req, res) => {
-//     try {
-//         console.log("Fetching leave requests for student:", req.token.id);
+// 📌 4. Get all leaves (For Director Dashboard)
+router.get("/all", verifyToken, leaveController.getLeaves);
 
-//         const leaves = await Leave.find({ student: req.token.id }).sort({
-//             createdAt: -1,
-//         });
-
-//         console.log("Found leave requests:", leaves.length);
-
-//         // ✅ Log the actual leave data if you want to see details
-//         console.log("Leave requests:", leaves);
-
-//         res.json({ success: true, leaves });
-//     } catch (err) {
-//         console.error("Error fetching leaves:", err);
-//         res.status(500).json({ error: "Internal Server Error" });
-//     }
-// });
-
-// 📌 Get my leave requests - FIXED VERSION
+// 📌 5. Get My Requests (For Student Dashboard)
+// Kept inline because it's a simple fetch
 router.get("/my-requests", verifyToken, async (req, res) => {
     try {
-        // console.log("Fetching leave requests for student:", req.token.id);
-
-        // Since your Leave model references "User", but you're using student ID
-        // We need to check what model your student IDs actually belong to
-
         const leaves = await Leave.find({ student: req.token.id })
-            .populate('student', 'name accNo roomNo') // Populate student details
-            .populate('director', 'name') // Populate director details if exists
-            .populate('assignedAD', 'name') // Populate AD details if exists
+            // Setting strictPopulate to false prevents crashes if the field is missing!
+            .populate({ path: 'director', select: 'name', strictPopulate: false })
+            .populate({ path: 'assignedAD', select: 'name', strictPopulate: false })
+            .populate({ path: 'actionBy', select: 'name username', strictPopulate: false })
             .sort({ appliedAt: -1 });
-
-        // console.log("Found leave requests:", leaves.length);
-
-        // ✅ Log the actual leave data for debugging
-        // if (leaves.length > 0) {
-        //     console.log("Sample leave request:", {
-        //         id: leaves[0]._id,
-        //         student: leaves[0].student,
-        //         fromDate: leaves[0].fromDate,
-        //         toDate: leaves[0].toDate,
-        //         status: leaves[0].status
-        //     });
-        // }
 
         res.json({
             success: true,
@@ -81,169 +36,55 @@ router.get("/my-requests", verifyToken, async (req, res) => {
         });
 
     } catch (err) {
-        console.error("Error fetching leaves:", err);
-        res.status(500).json({
-            error: "Internal Server Error",
-            details: err.message
-        });
+        console.error("Error fetching my leaves:", err);
+        res.status(500).json({ error: "Internal Server Error", details: err.message });
     }
 });
 
-router.post("/apply", verifyToken, async (req, res) => {
-    try {
-        const { fromDate, toDate, reason } = req.body;
-
-        const leave = new Leave({
-            student: req.token.id,
-            fromDate,
-            toDate,
-            reason,
-        });
-
-        await leave.save();
-        res.status(201).json({ success: true, leave });
-    } catch (err) {
-        console.error("Error creating leave request:", err);
-        res.status(500).json({ error: "Internal Server Error" });
-    }
-});
-
-// 📌 Director approves/rejects leave
-// 📌 Director approves/rejects leave - FIXED VERSION
-router.post("/:leaveId/action", verifyToken, async (req, res) => {
-    try {
-        // console.log("Director action request:", {
-        //     leaveId: req.params.leaveId,
-        //     body: req.body,
-        //     token: req.token
-        // });
-
-        const { leaveId } = req.params;
-        const { action, rejectionReason, assignedAD } = req.body;
-
-        // Validate required fields
-        if (!action) {
-            return res.status(400).json({ error: "Action is required" });
-        }
-
-        const leave = await Leave.findById(leaveId);
-        if (!leave) {
-            // console.log("Leave not found:", leaveId);
-            return res.status(404).json({ error: "Leave not found" });
-        }
-
-        // console.log("Current leave status:", leave.status);
-
-        if (action === "approve") {
-            // For approve action, assignedAD is optional but recommended
-            leave.status = "approved_by_director";
-            leave.director = req.token.id;
-            leave.assignedAD = assignedAD || null; // Handle case where assignedAD is not provided
-            leave.approvedByDirector = true; // Update the schema field
-
-            // console.log("Approving leave with AD:", assignedAD);
-        } else if (action === "reject") {
-            if (!rejectionReason) {
-                return res.status(400).json({ error: "Rejection reason is required" });
-            }
-            leave.status = "rejected";
-            leave.rejectionReason = rejectionReason;
-            leave.director = req.token.id;
-
-            // console.log("Rejecting leave with reason:", rejectionReason);
-        } else {
-            return res.status(400).json({ error: "Invalid action. Use 'approve' or 'reject'" });
-        }
-
-        await leave.save();
-        // console.log("Leave updated successfully:", leave.status);
-
-        res.json({
-            success: true,
-            message: `Leave ${action}ed successfully`,
-            leave
-        });
-    } catch (err) {
-        console.error("Error in director action:", err);
-        res.status(500).json({ error: "Internal Server Error" });
-    }
-});
-
-// 📌 AD checks approved leave
-router.post("/:leaveId/ad-check", verifyToken, async (req, res) => {
-    try {
-        const { leaveId } = req.params;
-
-        const leave = await Leave.findById(leaveId);
-        if (!leave) return res.status(404).json({ error: "Leave not found" });
-
-        if (leave.status !== "approved_by_director") {
-            return res.status(400).json({ error: "Director approval required before AD check" });
-        }
-
-        // If you add checkedByAD to schema
-        // leave.checkedByAD = true;
-
-        // Or update status if you want to track AD check
-        leave.status = "approved_by_ad"; // You might want to add this to enum
-
-        await leave.save();
-        res.json({ success: true, message: "AD has checked the leave", leave });
-    } catch (err) {
-        console.error("Error in AD check:", err);
-        res.status(500).json({ error: "Internal Server Error" });
-    }
-});
-
-// 📌 Get all leaves (for director/AD dashboard)
-router.get("/all", verifyToken, async (req, res) => {
-    try {
-        const leaves = await Leave.find()
-            .populate("student", "name accNo roomNo")
-            .populate("director", "name")
-            .populate("assignedAD", "name")
-            .sort({ appliedAt: -1 });
-        // console.log(leaves)
-        res.json({ success: true, leaves });
-
-    } catch (err) {
-        console.error("Error fetching leaves:", err);
-        res.status(500).json({ error: "Internal Server Error" });
-    }
-});
-
-
-// ✅ AD fetch approved leaves
+// 📌 6. Get Leaves for specific AD
 router.get("/ad/leaves", verifyToken, async (req, res) => {
     try {
         if (req.token.role !== "ad") {
             return res.status(403).json({ error: "Forbidden" });
         }
 
+        const User = require("../models/user.model");
         const ad = await User.findById(req.token.id);
 
-        const halls = ad.roomsIncharge?.hall || [];
-        const from = parseInt(ad.roomsIncharge?.from);
-        const to = parseInt(ad.roomsIncharge?.to);
-
-        // Build room matching conditions
         const matchConditions = [];
 
-        if (Array.isArray(halls) && halls.length > 0) {
-            matchConditions.push({ roomNo: { $in: halls } });
-        }
+        // Check if roomsIncharge exists and has ranges
+        if (ad.roomsIncharge && ad.roomsIncharge.length > 0) {
+            ad.roomsIncharge.forEach((range) => {
+                const halls = range.hall || [];
+                const from = parseInt(range.from);
+                const to = parseInt(range.to);
 
-        if (!isNaN(from) && !isNaN(to)) {
-            matchConditions.push({
-                numericRoom: { $gte: from, $lte: to },
+                if (Array.isArray(halls) && halls.length > 0) {
+                    matchConditions.push({ "student.roomNo": { $in: halls } });
+                }
+                if (!isNaN(from) && !isNaN(to)) {
+                    matchConditions.push({ "numericRoom": { $gte: from, $lte: to } });
+                }
             });
         }
 
-        // Fetch leaves where student room matches AD's rooms
-        const leaves = await Leave.aggregate([
-            {
-                $match: { status: "approved_by_director" }
-            },
+        // --- NEW SAFETY CHECK: IF NO ROOMS ASSIGNED, RETURN EMPTY ARRAY ---
+        if (matchConditions.length === 0) {
+            return res.json({ success: true, leaves: [] });
+        }
+
+        // Build the pipeline dynamically
+        const pipeline = [
+            // {
+            // Match leaves that either the AD needs to approve, OR Director approved and AD needs to check
+            //     $match: {
+            //         $or: [
+            //             { status: "pending", requiresApprovalFrom: "ad" },
+            //             { status: "approved_by_director" }
+            //         ]
+            //     }
+            // },
             {
                 $lookup: {
                     from: "students",
@@ -264,24 +105,28 @@ router.get("/ad/leaves", verifyToken, async (req, res) => {
                     }
                 }
             },
+            // Safely apply the match conditions
             {
-                $match: {
-                    $or: matchConditions
-                }
+                $match: { $or: matchConditions }
             },
             {
                 $project: {
-                    student: { name: 1, accNo: 1, roomNo: 1 },
+                    student: { name: 1, accNo: 1, roomNo: 1, dNo: 1 },
                     reason: 1,
+                    place: 1,
                     appliedAt: 1,
                     status: 1,
-                    fromDate: 1,   // ✅ include fromDate
-                    toDate: 1      // ✅ include toDate
+                    fromDate: 1,
+                    toDate: 1,
+                    requiresApprovalFrom: 1,
+                    isEmergency: 1,
+                    checkedByAD: 1 // Crucial for the Flutter app filtering logic
                 }
             },
             { $sort: { appliedAt: -1 } }
-        ]);
+        ];
 
+        const leaves = await Leave.aggregate(pipeline);
 
         res.json({ success: true, leaves });
     } catch (err) {
