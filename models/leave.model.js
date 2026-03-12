@@ -3,34 +3,38 @@ const mongoose = require("mongoose");
 const leaveSchema = new mongoose.Schema({
     student: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Student", // student who applied
+        ref: "Student",
         required: true,
     },
     fromDate: { type: Date, required: true },
     toDate: { type: Date, required: true },
+    place: { type: String, required: true }, // NEW: Where they are going
     reason: { type: String, required: true },
+    isEmergency: { type: Boolean, default: false }, // NEW: Student can flag as emergency
+
+    // NEW: Who is responsible for approving this specific leave?
+    requiresApprovalFrom: {
+        type: String,
+        enum: ["ad", "director"],
+        required: true
+    },
 
     status: {
         type: String,
-        enum: ["pending", "approved_by_director", "rejected"],
+        // Updated to handle both AD and Director approvals
+        enum: ["pending", "approved_by_ad", "approved_by_director", "rejected"],
         default: "pending",
     },
 
-    rejectionReason: { type: String }, // only if rejected
+    rejectionReason: { type: String },
 
-    director: {
+    // Who actually took action
+    actionBy: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User", // who approved/rejected
-    },
-
-    assignedAD: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User", // AD for the student
+        ref: "User",
     },
 
     appliedAt: { type: Date, default: Date.now },
-    approvedByDirector: { type: Boolean, default: false },
-    checkedByAD: { type: Boolean, default: false },
 });
 
 module.exports = mongoose.model("Leave", leaveSchema);
